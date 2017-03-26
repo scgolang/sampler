@@ -88,6 +88,9 @@ func (s *Sampler) Play(slot int, ctls map[string]float32) error {
 		defName = s.samples[slot].defName
 		sid     = s.client.NextSynthID()
 	)
+	if ctls == nil {
+		ctls = map[string]float32{}
+	}
 	ctls["bufnum"] = float32(slot)
 	_, err := s.group.Synth(defName, sid, action, ctls)
 	return err
