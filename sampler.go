@@ -59,6 +59,38 @@ func (s *Sampler) Add(audioFile string, slot int) error {
 	return nil
 }
 
+// Play plays the samples at the given slot.
+// Note that this method does not validate that the slot is between 0 and 127.
+func (s *Sampler) Play(slot int, ctls map[string]float32) error {
+	return s.group.Synths(s.slotSynthArgs(slot, ctls))
+}
+
+// slotBundle returns an OSC bundle for the given slot.
+// Note that this method does not validate that the slot is between 0 and 127.
+func (s *Sampler) slotSynthArgs(slot int, ctls map[string]float32) []sc.SynthArgs {
+	synthArgs := make([]sc.SynthArgs, len(s.samples[slot]))
+
+	for i, samp := range s.samples[slot] {
+		// TODO: use different synthdefs that provide different types of sample playback (e.g. granular)
+		if samp.numChannels == 1 {
+			synthArgs[i] = sc.SynthArgs{
+				DefName: defSimpleMono.Name,
+				ID:      s.client.NextSynthID(),
+				Action:  sc.AddToTail,
+				Ctls:    map[string]float32{},
+			}
+			continue
+		}
+		synthArgs[i] = sc.SynthArgs{
+			DefName: defSimpleStereo.Name,
+			ID:      s.client.NextSynthID(),
+			Action:  sc.AddToTail,
+			Ctls:    map[string]float32{},
+		}
+	}
+	return synthArgs
+}
+
 type sample struct {
 	numChannels int
 }
