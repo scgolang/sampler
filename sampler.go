@@ -2,6 +2,7 @@
 package sampler
 
 import (
+	"path/filepath"
 	"time"
 
 	"github.com/mkb218/gosndfile/sndfile"
@@ -16,7 +17,7 @@ import (
 type Sampler struct {
 	client  *sc.Client
 	group   *sc.Group
-	samples [128][]sample
+	samples [128]sample
 }
 
 // New creates a new sampler.
@@ -44,7 +45,7 @@ func New(scsynthAddr string) (*Sampler, error) {
 }
 
 // Add adds a sample at the provided path to the specified slot
-func (s *Sampler) Add(audioFile string, slot int) error {
+func (s *Sampler) Add(slot int, audioFile string) error {
 	var info sndfile.Info
 	if _, err := sndfile.Open(audioFile, sndfile.Read, &info); err != nil {
 		return err
@@ -55,43 +56,45 @@ func (s *Sampler) Add(audioFile string, slot int) error {
 	if err := validateSlot(slot); err != nil {
 		return err
 	}
-	s.samples[slot] = append(s.samples[slot], sample{numChannels: int(info.Channels)})
+	samplePath, err := filepath.Abs(audioFile)
+	if err != nil {
+		return err
+	}
+	if _, err := s.client.ReadBuffer(samplePath, int32(slot)); err != nil {
+		return err
+	}
+	var samp sample
+	if info.Channels == 1 {
+		samp = sample{
+			defName:     defSimpleMono.Name,
+			numChannels: int(info.Channels),
+		}
+	} else {
+		samp = sample{
+			defName:     defSimpleStereo.Name,
+			numChannels: int(info.Channels),
+		}
+	}
+	s.samples[slot] = samp
+
 	return nil
 }
 
 // Play plays the samples at the given slot.
 // Note that this method does not validate that the slot is between 0 and 127.
 func (s *Sampler) Play(slot int, ctls map[string]float32) error {
-	return s.group.Synths(s.slotSynthArgs(slot, ctls))
-}
-
-// slotBundle returns an OSC bundle for the given slot.
-// Note that this method does not validate that the slot is between 0 and 127.
-func (s *Sampler) slotSynthArgs(slot int, ctls map[string]float32) []sc.SynthArgs {
-	synthArgs := make([]sc.SynthArgs, len(s.samples[slot]))
-
-	for i, samp := range s.samples[slot] {
-		// TODO: use different synthdefs that provide different types of sample playback (e.g. granular)
-		if samp.numChannels == 1 {
-			synthArgs[i] = sc.SynthArgs{
-				DefName: defSimpleMono.Name,
-				ID:      s.client.NextSynthID(),
-				Action:  sc.AddToTail,
-				Ctls:    map[string]float32{},
-			}
-			continue
-		}
-		synthArgs[i] = sc.SynthArgs{
-			DefName: defSimpleStereo.Name,
-			ID:      s.client.NextSynthID(),
-			Action:  sc.AddToTail,
-			Ctls:    map[string]float32{},
-		}
-	}
-	return synthArgs
+	var (
+		action  = sc.AddToTail
+		defName = s.samples[slot].defName
+		sid     = s.client.NextSynthID()
+	)
+	ctls["bufnum"] = float32(slot)
+	_, err := s.group.Synth(defName, sid, action, ctls)
+	return err
 }
 
 type sample struct {
+	defName     string
 	numChannels int
 }
 
