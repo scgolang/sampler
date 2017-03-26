@@ -120,7 +120,7 @@ func simpleDef(numChannels int) sc.UgenFunc {
 
 func validateSlot(slot int) error {
 	if slot < 0 || slot > 127 {
-		return errors.Errorf("slot (%d) must be >= 0 and <= 127")
+		return errors.Errorf("slot (%d) must be >= 0 and <= 127", slot)
 	}
 	return nil
 }
